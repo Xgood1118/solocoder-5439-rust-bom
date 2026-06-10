@@ -1,0 +1,1 @@
+Excel 上传废了。只要数量/损耗率/单价三列是数字格（任何 CAD 导出的 BOM 都是这样），接口直接返 400 数量格式错误行 2。原因是 bom.rs 的 parse_excel 只调 cell.get_string()，遇到数字格 get_string 返空，parse::<f64> 立刻挂。损耗率/单价走 get_opt 静默落 0，成本算出负数或全 0。检查修复一下。
