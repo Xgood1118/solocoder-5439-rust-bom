@@ -176,11 +176,27 @@ pub fn diff_bom(old: &BomData, new: &BomData) -> Vec<ChangeItem> {
                         material_no: Some(item.material_no.clone()),
                     });
                 }
+                if old_item.bom_type != item.bom_type {
+                    changes.push(ChangeItem {
+                        field: "类型".to_string(),
+                        old_value: old_item.bom_type.to_string(),
+                        new_value: item.bom_type.to_string(),
+                        material_no: Some(item.material_no.clone()),
+                    });
+                }
                 if old_item.quantity != item.quantity {
                     changes.push(ChangeItem {
                         field: "数量".to_string(),
                         old_value: old_item.quantity.to_string(),
                         new_value: item.quantity.to_string(),
+                        material_no: Some(item.material_no.clone()),
+                    });
+                }
+                if old_item.unit != item.unit {
+                    changes.push(ChangeItem {
+                        field: "单位".to_string(),
+                        old_value: old_item.unit.clone(),
+                        new_value: item.unit.clone(),
                         material_no: Some(item.material_no.clone()),
                     });
                 }
@@ -192,6 +208,14 @@ pub fn diff_bom(old: &BomData, new: &BomData) -> Vec<ChangeItem> {
                         material_no: Some(item.material_no.clone()),
                     });
                 }
+                if old_item.supplier != item.supplier {
+                    changes.push(ChangeItem {
+                        field: "供应商".to_string(),
+                        old_value: old_item.supplier.clone(),
+                        new_value: item.supplier.clone(),
+                        material_no: Some(item.material_no.clone()),
+                    });
+                }
                 if old_item.unit_price != item.unit_price {
                     changes.push(ChangeItem {
                         field: "单价".to_string(),
@@ -200,11 +224,35 @@ pub fn diff_bom(old: &BomData, new: &BomData) -> Vec<ChangeItem> {
                         material_no: Some(item.material_no.clone()),
                     });
                 }
-                if old_item.supplier != item.supplier {
+                if old_item.source != item.source {
                     changes.push(ChangeItem {
-                        field: "供应商".to_string(),
-                        old_value: old_item.supplier.clone(),
-                        new_value: item.supplier.clone(),
+                        field: "来源".to_string(),
+                        old_value: old_item.source.to_string(),
+                        new_value: item.source.to_string(),
+                        material_no: Some(item.material_no.clone()),
+                    });
+                }
+                if old_item.effective_date != item.effective_date {
+                    changes.push(ChangeItem {
+                        field: "生效日期".to_string(),
+                        old_value: old_item.effective_date.clone(),
+                        new_value: item.effective_date.clone(),
+                        material_no: Some(item.material_no.clone()),
+                    });
+                }
+                if old_item.expiry_date != item.expiry_date {
+                    changes.push(ChangeItem {
+                        field: "失效日期".to_string(),
+                        old_value: old_item.expiry_date.clone(),
+                        new_value: item.expiry_date.clone(),
+                        material_no: Some(item.material_no.clone()),
+                    });
+                }
+                if old_item.parent_material_no != item.parent_material_no {
+                    changes.push(ChangeItem {
+                        field: "父件物料号".to_string(),
+                        old_value: old_item.parent_material_no.clone().unwrap_or_default(),
+                        new_value: item.parent_material_no.clone().unwrap_or_default(),
                         material_no: Some(item.material_no.clone()),
                     });
                 }
@@ -418,5 +466,106 @@ mod tests {
 
         let changes = diff_bom(&old, &new);
         assert!(changes.len() > 0);
+    }
+
+    #[test]
+    fn test_diff_bom_all_fields() {
+        let old = vec![BomItem {
+            material_no: "A001".to_string(),
+            material_name: "成品A".to_string(),
+            specification: "".to_string(),
+            bom_type: BomType::FinishedProduct,
+            quantity: 1.0,
+            unit: "件".to_string(),
+            loss_rate: 0.05,
+            supplier: "供应商X".to_string(),
+            unit_price: 100.0,
+            source: SourceType::SelfMade,
+            effective_date: "2024-01-01".to_string(),
+            expiry_date: "2024-12-31".to_string(),
+            remark: "旧备注".to_string(),
+            parent_material_no: None,
+        }];
+
+        let new = vec![BomItem {
+            material_no: "A001".to_string(),
+            material_name: "成品A-改名".to_string(),
+            specification: "新规格".to_string(),
+            bom_type: BomType::SemiFinished,
+            quantity: 2.0,
+            unit: "套".to_string(),
+            loss_rate: 0.10,
+            supplier: "供应商Y".to_string(),
+            unit_price: 150.0,
+            source: SourceType::Outsourced,
+            effective_date: "2025-01-01".to_string(),
+            expiry_date: "2025-12-31".to_string(),
+            remark: "新备注".to_string(),
+            parent_material_no: Some("P001".to_string()),
+        }];
+
+        let changes = diff_bom(&old, &new);
+        let fields: Vec<&str> = changes.iter().map(|c| c.field.as_str()).collect();
+
+        assert!(fields.contains(&"物料名称"), "缺少物料名称对比");
+        assert!(fields.contains(&"规格"), "缺少规格对比");
+        assert!(fields.contains(&"类型"), "缺少类型(bom_type)对比 - 这是本次要修的bug");
+        assert!(fields.contains(&"数量"), "缺少数量对比");
+        assert!(fields.contains(&"单位"), "缺少单位对比");
+        assert!(fields.contains(&"损耗率"), "缺少损耗率对比");
+        assert!(fields.contains(&"供应商"), "缺少供应商对比");
+        assert!(fields.contains(&"单价"), "缺少单价对比");
+        assert!(fields.contains(&"来源"), "缺少来源(source)对比");
+        assert!(fields.contains(&"生效日期"), "缺少生效日期对比");
+        assert!(fields.contains(&"失效日期"), "缺少失效日期对比");
+        assert!(fields.contains(&"父件物料号"), "缺少父件物料号对比");
+        assert!(fields.contains(&"备注"), "缺少备注对比");
+
+        let type_change = changes.iter().find(|c| c.field == "类型").unwrap();
+        assert_eq!(type_change.old_value, "成品");
+        assert_eq!(type_change.new_value, "半成品");
+    }
+
+    #[test]
+    fn test_diff_bom_source_type() {
+        let old = vec![BomItem {
+            material_no: "A001".to_string(),
+            material_name: "成品A".to_string(),
+            specification: "".to_string(),
+            bom_type: BomType::FinishedProduct,
+            quantity: 1.0,
+            unit: "件".to_string(),
+            loss_rate: 0.05,
+            supplier: "".to_string(),
+            unit_price: 100.0,
+            source: SourceType::SelfMade,
+            effective_date: "".to_string(),
+            expiry_date: "".to_string(),
+            remark: "".to_string(),
+            parent_material_no: None,
+        }];
+
+        let new = vec![BomItem {
+            material_no: "A001".to_string(),
+            material_name: "成品A".to_string(),
+            specification: "".to_string(),
+            bom_type: BomType::FinishedProduct,
+            quantity: 1.0,
+            unit: "件".to_string(),
+            loss_rate: 0.05,
+            supplier: "".to_string(),
+            unit_price: 100.0,
+            source: SourceType::Purchased,
+            effective_date: "".to_string(),
+            expiry_date: "".to_string(),
+            remark: "".to_string(),
+            parent_material_no: None,
+        }];
+
+        let changes = diff_bom(&old, &new);
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].field, "来源");
+        assert_eq!(changes[0].old_value, "自制");
+        assert_eq!(changes[0].new_value, "外购");
     }
 }

@@ -1,0 +1,4 @@
+产物不满意：
+1. PUT /api/bom/{id} 这条编辑入口根本没调 validate_data：实测把 quantity=-5 / loss_rate=2.0 的 BomData 塞进 PUT body，state.update_bom → vm.update_bom 直接落版本、version_number 自增、change_count 正常返 2，跟"上传入口漏校验"是同一类 bug，工程师把版本改坏后只追不到能拒它的入口，月度结账回滚链上又多一条漏。
+2. calc.rs PriceTiersConfig::get_tier_name 在 qty 不在任一档区间时仍返字面量"未知档位"（第 69 行），但同结构 get_price_multiplier 已 fallback 到末档 unit_price——只要用户通过 PUT /api/config/price-tiers 配了不覆盖到 f64::MAX 的自定义档位（如只配 1~100/101~500 两档），qty>500 的 BOM 一算 total_cost 用的是第 2 档 0.9 倍单价、breakdown.price_tier 字段写"未知档位"，账面对账翻账本价对档位名对不上。
+3. tree.rs build_tree 的 root_candidates 没去重：第 87 行 `for root_no in &root_candidates` 直接遍历——validator 拒掉了 upload 路径的循环引用，但 PUT 路径绕开校验后 build_tree 还会按循环边把所有节点都加进 root_candidates，build_subtree 把同一棵子树跑两遍，flatten 后 BOM 树被切成两半，下游 cost 计算按 root 0 计一次、按 root 1 又计一次，成本翻倍报给采购。

@@ -135,6 +135,16 @@ async fn upload_bom(
         }
     };
 
+    let validation = state.validate_data(&bom_data);
+    if !validation.valid {
+        return HttpResponse::UnprocessableEntity().json(serde_json::json!({
+            "error": "BOM 校验未通过，拒绝入库",
+            "file_name": file_name,
+            "item_count": bom_data.len(),
+            "validation": validation,
+        }));
+    }
+
     let created_by = query.created_by.as_deref().unwrap_or("system");
     let reason = query.reason.as_deref().unwrap_or("上传导入");
 
@@ -150,6 +160,11 @@ async fn upload_bom(
         "version": version.version_number,
         "item_count": version.data.len(),
         "file_name": file_name,
+        "validation": {
+            "valid": true,
+            "error_count": 0,
+            "warning_count": validation.warning_count,
+        },
     }))
 }
 
@@ -344,27 +359,48 @@ async fn batch_upload(
                 .unwrap_or("")
                 .to_lowercase();
 
-            let result = state_clone.parse_bom(&data, &ext);
-            match result {
+            let parse_result = state_clone.parse_bom(&data, &ext);
+            match parse_result {
                 Ok(bom_data) => {
-                    let bom_id = format!("bom-{}", uuid::Uuid::new_v4());
                     let item_count = bom_data.len();
-                    state_clone.create_bom(
-                        Some(&bom_id),
-                        bom_data,
-                        &created_by,
-                        &format!("批量导入: {}", file_name),
-                    );
-                    state_clone.update_batch_progress(
-                        &job_id_clone,
-                        true,
-                        BatchResultItem {
-                            file_name: file_name.clone(),
-                            bom_id: Some(bom_id),
-                            item_count,
-                            error: None,
-                        },
-                    );
+                    let validation = state_clone.validate_data(&bom_data);
+
+                    if !validation.valid {
+                        let err_msg = format!(
+                            "校验未通过: {} 个错误, {} 个警告",
+                            validation.error_count, validation.warning_count
+                        );
+                        state_clone.update_batch_progress(
+                            &job_id_clone,
+                            false,
+                            BatchResultItem {
+                                file_name: file_name.clone(),
+                                bom_id: None,
+                                item_count,
+                                error: Some(err_msg),
+                                validation: Some(validation),
+                            },
+                        );
+                    } else {
+                        let bom_id = format!("bom-{}", uuid::Uuid::new_v4());
+                        state_clone.create_bom(
+                            Some(&bom_id),
+                            bom_data,
+                            &created_by,
+                            &format!("批量导入: {}", file_name),
+                        );
+                        state_clone.update_batch_progress(
+                            &job_id_clone,
+                            true,
+                            BatchResultItem {
+                                file_name: file_name.clone(),
+                                bom_id: Some(bom_id),
+                                item_count,
+                                error: None,
+                                validation: Some(validation),
+                            },
+                        );
+                    }
                 }
                 Err(e) => {
                     state_clone.update_batch_progress(
@@ -375,6 +411,7 @@ async fn batch_upload(
                             bom_id: None,
                             item_count: 0,
                             error: Some(e.to_string()),
+                            validation: None,
                         },
                     );
                 }

@@ -1,0 +1,6 @@
+产物不满意：
+1. 上传接口（POST /api/bom/upload）解析后直接 create_bom 落库，根本没调 BomValidator；PROMPT 明确要求循环引用 / 损耗率 0~50% / 数量正数 / 主数据存在必须校验，工程师把带病 CAD 导出文件一晚上 POST 一百次全 200 OK 进内存，要另外打 GET /validate 才看得到，月度批量结账场景直接全厂带病入库。
+2. 批量上传（POST /api/batch/upload）的 tokio::spawn 循环里同样 parse 完直接 create_bom，连 validate_data 都没调，PROMPT 提到月底一晚上要把全厂所有产品的 BOM 重新算一遍的场景，这里 100 个文件都跳过校验，错了也无从发现。
+3. version.rs 的 diff_bom 只比对 7 个字段（material_name / specification / quantity / loss_rate / unit_price / supplier / remark），bom_type / unit / source / effective_date / expiry_date 变化完全不出 change item；PROMPT 列举的 13 个 BOM 字段里 6 个改了不会触发新版本，回滚后类型/单位/来源/日期全错位没人知道。
+4. tree.rs build_tree 二次遍历只补全 root_candidates，但不去重；当 BOM 数据存在循环引用（虽然 validator 拒，但 build_tree 自己不依赖 validator）—— A.parent=B、B.parent=A，两个都会被加进 root_candidates，结果 build_subtree 跑出两棵半截 tree，下游 flatten 后 BOM 树被切碎。
+5. calc.rs get_price_multiplier 的"未知档位" 静默返末档价格，但 get_tier_name_for 在同条件下返"未知档位"—— cost breakdown 里 total_cost 用了第 4 档 0.7 倍单价，price_tier 字段却写"未知档位"，单价档位名自相矛盾，工程师对账时看价格对档位名错乱。

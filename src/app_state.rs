@@ -248,6 +248,7 @@ pub struct BatchResultItem {
     pub bom_id: Option<String>,
     pub item_count: usize,
     pub error: Option<String>,
+    pub validation: Option<ValidationResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -344,6 +345,7 @@ mod tests {
                 bom_id: Some("bom-001".to_string()),
                 item_count: 10,
                 error: None,
+                validation: None,
             },
         );
 
@@ -376,5 +378,78 @@ mod tests {
             .unwrap();
         assert_eq!(v3.version_number, 3);
         assert_eq!(state.get_bom("bom-001").unwrap()[0].unit_price, 100.0);
+    }
+
+    #[test]
+    fn test_upload_validation_blocks_invalid_data() {
+        let state = AppState::new();
+
+        let bad_loss = sample_bom_data()
+            .into_iter()
+            .map(|mut item| {
+                item.loss_rate = 1.5;
+                item
+            })
+            .collect::<Vec<_>>();
+
+        let validation = state.validate_data(&bad_loss);
+        assert!(!validation.valid);
+        assert!(validation
+            .issues
+            .iter()
+            .any(|i| i.code == "LOSS_RATE_TOO_HIGH"));
+    }
+
+    #[test]
+    fn test_validation_circular_reference_detected() {
+        use crate::bom::{BomItem, BomType, SourceType};
+
+        let state = AppState::new();
+
+        let circular_data = vec![
+            BomItem {
+                material_no: "A001".to_string(),
+                material_name: "物料A".to_string(),
+                specification: "".to_string(),
+                bom_type: BomType::SemiFinished,
+                quantity: 1.0,
+                unit: "件".to_string(),
+                loss_rate: 0.01,
+                supplier: "".to_string(),
+                unit_price: 10.0,
+                source: SourceType::SelfMade,
+                effective_date: "".to_string(),
+                expiry_date: "".to_string(),
+                remark: "".to_string(),
+                parent_material_no: Some("B001".to_string()),
+            },
+            BomItem {
+                material_no: "B001".to_string(),
+                material_name: "物料B".to_string(),
+                specification: "".to_string(),
+                bom_type: BomType::SemiFinished,
+                quantity: 1.0,
+                unit: "件".to_string(),
+                loss_rate: 0.01,
+                supplier: "".to_string(),
+                unit_price: 20.0,
+                source: SourceType::SelfMade,
+                effective_date: "".to_string(),
+                expiry_date: "".to_string(),
+                remark: "".to_string(),
+                parent_material_no: Some("A001".to_string()),
+            },
+        ];
+
+        let validation = state.validate_data(&circular_data);
+        assert!(!validation.valid);
+        assert!(
+            validation
+                .issues
+                .iter()
+                .any(|i| i.code == "CIRCULAR_REFERENCE"),
+            "循环引用未检测到! issues={:?}",
+            validation.issues
+        );
     }
 }
