@@ -211,11 +211,27 @@ async fn update_bom(
     id: web::Path<String>,
     body: web::Json<UpdateBomRequest>,
 ) -> impl Responder {
+    let validation = state.validate_data(&body.items);
+    if !validation.valid {
+        return HttpResponse::UnprocessableEntity().json(serde_json::json!({
+            "error": "BOM 校验未通过，拒绝更新",
+            "bom_id": id.into_inner(),
+            "item_count": body.items.len(),
+            "validation": validation,
+        }));
+    }
+
     match state.update_bom(&id, body.items.clone(), &body.modified_by, &body.reason) {
         Ok(version) => HttpResponse::Ok().json(serde_json::json!({
             "bom_id": version.bom_id,
             "version": version.version_number,
             "change_count": version.change_description.len(),
+            "validation": {
+                "valid": true,
+                "error_count": 0,
+                "warning_count": validation.warning_count,
+                "info_count": validation.info_count,
+            },
         })),
         Err(e) => HttpResponse::NotFound().json(serde_json::json!({ "error": e })),
     }

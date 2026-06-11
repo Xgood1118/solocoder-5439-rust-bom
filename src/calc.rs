@@ -66,7 +66,15 @@ impl PriceTiersConfig {
                 return format!("第{}档 ({}~{})", i + 1, tier.min_qty, tier.max_qty);
             }
         }
-        "未知档位".to_string()
+        match self.tiers.last() {
+            Some(tier) => format!(
+                "第{}档 ({}~{})",
+                self.tiers.len(),
+                tier.min_qty,
+                tier.max_qty
+            ),
+            None => "默认档位".to_string(),
+        }
     }
 }
 
@@ -464,5 +472,48 @@ mod tests {
         let tree = sample_tree();
         let result = calc.calculate(&tree, 10.0);
         assert!(result.total_cost > 0.0);
+    }
+
+    #[test]
+    fn test_tier_name_consistent_with_multiplier() {
+        let tiers = PriceTiersConfig::default();
+
+        let last_tier = tiers.tiers.last().unwrap();
+        let last_multiplier = last_tier.unit_price;
+        let last_tier_index = tiers.tiers.len();
+
+        let fallback_multiplier = tiers.get_price_multiplier(f64::MAX);
+        let fallback_name = tiers.get_tier_name(f64::MAX);
+
+        assert_eq!(fallback_multiplier, last_multiplier);
+        assert!(
+            fallback_name.contains(&format!("第{}档", last_tier_index)),
+            "fallback 档位名应该与最后一档一致，实际为: {}",
+            fallback_name
+        );
+        assert!(
+            !fallback_name.contains("未知"),
+            "fallback 档位名不应为'未知档位'，实际为: {}",
+            fallback_name
+        );
+
+        for (i, tier) in tiers.tiers.iter().enumerate() {
+            let mid_qty = (tier.min_qty + tier.max_qty) / 2.0;
+            let name = tiers.get_tier_name(mid_qty);
+            assert!(
+                name.contains(&format!("第{}档", i + 1)),
+                "数量 {} 应该匹配第{}档，实际档位名: {}",
+                mid_qty,
+                i + 1,
+                name
+            );
+        }
+    }
+
+    #[test]
+    fn test_empty_tiers_fallback() {
+        let empty_tiers = PriceTiersConfig { tiers: vec![] };
+        assert_eq!(empty_tiers.get_price_multiplier(100.0), 1.0);
+        assert_eq!(empty_tiers.get_tier_name(100.0), "默认档位");
     }
 }
